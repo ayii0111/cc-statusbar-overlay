@@ -125,10 +125,9 @@ label.backgroundColor = .clear
 label.isBezeled = false
 label.alignment = .right
 
-let textColor = NSColor(red: 0.239, green: 0.224, blue: 0.161, alpha: 1.0)
-let attrs: [NSAttributedString.Key: Any] = [
+var attrs: [NSAttributedString.Key: Any] = [
     .font: NSFont.systemFont(ofSize: 12, weight: .regular),
-    .foregroundColor: textColor,
+    .foregroundColor: NSColor(red: 0.239, green: 0.224, blue: 0.161, alpha: 1.0),
 ]
 label.attributedStringValue = NSAttributedString(string: "", attributes: attrs)
 
@@ -146,8 +145,27 @@ let CLAUDE_BUNDLE = "com.anthropic.claudefordesktop"
 var lastFileDate: Date? = nil
 var lastText: String = ""
 var lastPanelFrame: CGRect = .zero
+var lastDarkMode: Bool? = nil
+
+func isDarkMode() -> Bool {
+    UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
+}
 
 func updateOverlay() {
+    // 亮暗模式切換時更新顏色
+    let dark = isDarkMode()
+    if dark != lastDarkMode {
+        lastDarkMode = dark
+        let fg = dark ? NSColor(red: 0.737, green: 0.737, blue: 0.737, alpha: 1.0)
+                      : NSColor(red: 0.239, green: 0.224, blue: 0.161, alpha: 1.0)
+        let bg = dark ? NSColor(red: 0.122, green: 0.122, blue: 0.118, alpha: 1.0)
+                      : NSColor(red: 0.98, green: 0.976, blue: 0.961, alpha: 1.0)
+        attrs[.foregroundColor] = fg
+        container.layer?.backgroundColor = bg.cgColor
+        lastText = "" // 強制重繪文字
+        dbg("外觀切換: dark=\(dark)")
+    }
+
     // 只在 Claude Code 桌面版為最前景 app 時顯示
     let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil"
     guard frontmost == CLAUDE_BUNDLE else {
