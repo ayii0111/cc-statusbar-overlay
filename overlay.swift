@@ -180,6 +180,13 @@ func updateOverlay() {
     // 只在檔案有更新時才重新解析 JSON
     let jsonPath = NSHomeDirectory() + "/.claude/cc-page/last-statusline.json"
     let fileDate = (try? FileManager.default.attributesOfItem(atPath: jsonPath))?[.modificationDate] as? Date
+
+    // 檔案是全域共用（所有 Claude Code session 都寫同一份），超過新鮮度門檻
+    // 代表最後寫入的是別的閒置 session，不是當前這個，不該顯示（對齊 coralline 的做法）
+    guard let fd = fileDate, Date().timeIntervalSince(fd) < 10 else {
+        if panel.isVisible { panel.orderOut(nil) }
+        return
+    }
     if fileDate != lastFileDate, let s = readStatus() {
         lastFileDate = fileDate
         let newText = formatStatus(s)
