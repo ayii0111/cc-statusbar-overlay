@@ -80,7 +80,9 @@ func readStatus() -> Status? {
 
 func bar(_ pct: Int, width: Int = 5) -> String {
     let filled = max(0, min(width, Int(Double(pct) / 100.0 * Double(width) + 0.5)))
-    return String(repeating: "█", count: filled) + String(repeating: "░", count: width - filled)
+    // ▰▱ 兩個字符 fallback 到不同字型（Menlo vs 日文字型），寬度不一致導致 bar 總長不對齊；
+    // ■□ 都落在系統字型 .SFNS-Regular，寬度一致
+    return String(repeating: "■", count: filled) + String(repeating: "□", count: width - filled)
 }
 
 func eta(_ ts: Double) -> String {
@@ -228,8 +230,9 @@ func updateOverlay() {
     let screenH = NSScreen.main?.frame.height ?? 900
     let claudeNSY = screenH - frame.origin.y - frame.size.height
     let rightEdge = frame.origin.x + frame.size.width - RIGHT_EDGE_OFFSET
-    let ox = rightEdge - OVERLAY_W
-    let oy = claudeNSY + (TOOLBAR_H - OVERLAY_H) / 2
+    // 四捨五入到整數像素，避免 subpixel 定位造成文字 AA 模糊、粗細不一
+    let ox = (rightEdge - OVERLAY_W).rounded()
+    let oy = (claudeNSY + (TOOLBAR_H - OVERLAY_H) / 2).rounded()
     let newFrame = CGRect(x: ox, y: oy, width: OVERLAY_W, height: OVERLAY_H)
     if newFrame != lastPanelFrame {
         lastPanelFrame = newFrame
