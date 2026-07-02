@@ -78,11 +78,11 @@ func readStatus() -> Status? {
     return s
 }
 
+let BAR_CHARS = CharacterSet(charactersIn: "▰▱")
+
 func bar(_ pct: Int, width: Int = 5) -> String {
     let filled = max(0, min(width, Int(Double(pct) / 100.0 * Double(width) + 0.5)))
-    // ▰▱ 兩個字符 fallback 到不同字型（Menlo vs 日文字型），寬度不一致導致 bar 總長不對齊；
-    // ■□ 都落在系統字型 .SFNS-Regular，寬度一致
-    return String(repeating: "■", count: filled) + String(repeating: "□", count: width - filled)
+    return String(repeating: "▰", count: filled) + String(repeating: "▱", count: width - filled)
 }
 
 func eta(_ ts: Double) -> String {
@@ -157,7 +157,26 @@ var attrs: [NSAttributedString.Key: Any] = [
     .font: NSFont.systemFont(ofSize: 12, weight: .regular),
     .foregroundColor: NSColor(red: 0.239, green: 0.224, blue: 0.161, alpha: 1.0),
 ]
-label.attributedStringValue = NSAttributedString(string: "", attributes: attrs)
+// ▰▱ 在系統字型下沒有原生字形，交給 CoreText 自動 fallback 會依「這個 run 裡有沒有出現 ▰」
+// 而不穩定地分配到不同字型（Menlo 或日文字型），導致 5h/7d 兩條 bar 寬度時對時不對。
+// Menlo 原生同時內建這兩個字符，強制指定可跳過不穩定的自動 fallback。
+let BAR_FONT = NSFont(name: "Menlo-Regular", size: 12) ?? NSFont.systemFont(ofSize: 12)
+
+func attributedStatus(_ text: String) -> NSAttributedString {
+    let result = NSMutableAttributedString(string: text, attributes: attrs)
+    let ns = text as NSString
+    // 5h／7d 兩個區塊間距再加 8px（用 kern 加在分隔空白上，不改動 formatStatus 的字串內容）
+    let sep = ns.range(of: "   7d")
+    if sep.location != NSNotFound {
+        result.addAttribute(.kern, value: 8, range: NSRange(location: sep.location, length: 1))
+    }
+    for i in 0..<ns.length where BAR_CHARS.contains(UnicodeScalar(ns.character(at: i))!) {
+        result.addAttribute(.font, value: BAR_FONT, range: NSRange(location: i, length: 1))
+    }
+    return result
+}
+
+label.attributedStringValue = attributedStatus("")
 
 let container = NSView()
 container.wantsLayer = true
@@ -220,7 +239,7 @@ func updateOverlay() {
         let newText = formatStatus(s)
         if newText != lastText {
             lastText = newText
-            let str = NSAttributedString(string: newText, attributes: attrs)
+            let str = attributedStatus(newText)
             label.attributedStringValue = str
             OVERLAY_W = ceil(str.boundingRect(with: NSSize(width: 9999, height: 20), options: .usesLineFragmentOrigin).width) + 4
         }
