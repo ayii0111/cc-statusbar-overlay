@@ -80,7 +80,7 @@ func readStatus() -> Status? {
 
 func bar(_ pct: Int, width: Int = 5) -> String {
     let filled = max(0, min(width, Int(Double(pct) / 100.0 * Double(width) + 0.5)))
-    return String(repeating: "▰", count: filled) + String(repeating: "▱", count: width - filled)
+    return String(repeating: "█", count: filled) + String(repeating: "░", count: width - filled)
 }
 
 func eta(_ ts: Double) -> String {
