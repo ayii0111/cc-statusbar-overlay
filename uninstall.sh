@@ -1,6 +1,7 @@
 #!/bin/bash
 SETTINGS="$HOME/.claude/settings.json"
 CC_PAGE="$HOME/.claude/cc-page"
+CAPTURE="$CC_PAGE/capture.sh"
 PLIST="$HOME/Library/LaunchAgents/com.cc-statusbar-overlay.plist"
 
 echo "=== cc-statusbar-overlay uninstaller ==="

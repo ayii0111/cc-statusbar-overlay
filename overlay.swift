@@ -39,6 +39,30 @@ func parseLimit(_ entry: [String: Any]?) -> Limit {
     return Limit(pct: pct, resetsAt: rst)
 }
 
+// 跨 session 高水位同步：讀 hooks/capture.sh 寫的目錄集合（見該檔案註解）。
+// 目錄項目名為 "<reset:%010d>_<pct:%07.3f>"，字典序排序即數值排序，
+// 取排序後最後一項就是「目前窗口內看過的最大用量」，順便清掉非最大值的舊項目。
+func rlLatest(_ dir: String) -> (pct: Double, resetsAt: Double)? {
+    guard let entries = try? FileManager.default.contentsOfDirectory(atPath: dir),
+          let hi = entries.sorted().last
+    else { return nil }
+    let parts = hi.split(separator: "_", maxSplits: 1)
+    guard parts.count == 2, let r = Double(parts[0]), let p = Double(parts[1]) else { return nil }
+    for e in entries where e != hi {
+        try? FileManager.default.removeItem(atPath: dir + "/" + e)
+    }
+    return (p, r)
+}
+
+// 用高水位值覆蓋本機快照：新窗口（reset 較大）直接採用；同一窗口取較大的 pct；
+// 舊窗口（reset 較小，代表 store 還沒追上新窗口）維持本機值。
+func mergedLimit(_ local: Limit, storeDir: String) -> Limit {
+    guard let (p, r) = rlLatest(storeDir) else { return local }
+    if r > local.resetsAt { return Limit(pct: Int(p.rounded()), resetsAt: r) }
+    if r == local.resetsAt { return Limit(pct: max(local.pct, Int(p.rounded())), resetsAt: r) }
+    return local
+}
+
 func readStatus() -> Status? {
     let path = NSHomeDirectory() + "/.claude/cc-page/last-statusline.json"
     guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
@@ -46,8 +70,10 @@ func readStatus() -> Status? {
           let rl = j["rate_limits"] as? [String: Any]
     else { dbg("readStatus: 讀不到 last-statusline.json"); return nil }
     var s = Status()
-    s.fiveHour = parseLimit(rl["five_hour"] as? [String: Any])
-    s.sevenDay  = parseLimit(rl["seven_day"]  as? [String: Any])
+    s.fiveHour = mergedLimit(parseLimit(rl["five_hour"] as? [String: Any]),
+                              storeDir: NSHomeDirectory() + "/.claude/cc-page/limit-5h.d")
+    s.sevenDay  = mergedLimit(parseLimit(rl["seven_day"]  as? [String: Any]),
+                              storeDir: NSHomeDirectory() + "/.claude/cc-page/limit-7d.d")
     dbg("readStatus: 5h=\(s.fiveHour.pct)% rst=\(s.fiveHour.resetsAt)  7d=\(s.sevenDay.pct)% rst=\(s.sevenDay.resetsAt)")
     return s
 }
@@ -95,7 +121,7 @@ let OVERLAY_H: CGFloat = TOOLBAR_H - 6
 
 // 右邊界距 Claude 視窗右緣的距離（涵蓋 Sonnet 文字區 + 8px 間距）
 // 若 UI 改版需要調整，改這一個數字即可
-let RIGHT_EDGE_OFFSET: CGFloat = 230
+let RIGHT_EDGE_OFFSET: CGFloat = 272
 
 // ── Overlay Window ───────────────────────────────────────────────────────────
 
