@@ -123,7 +123,7 @@ let OVERLAY_H: CGFloat = TOOLBAR_H - 6
 
 // 右邊界距 Claude 視窗右緣的距離（涵蓋 Sonnet 文字區 + 8px 間距）
 // 若 UI 改版需要調整，改這一個數字即可
-let RIGHT_EDGE_OFFSET: CGFloat = 272
+let RIGHT_EDGE_OFFSET: CGFloat = 472
 
 // ── Overlay Window ───────────────────────────────────────────────────────────
 
@@ -226,14 +226,28 @@ func updateOverlay() {
 
     // 只在檔案有更新時才重新解析 JSON
     let jsonPath = NSHomeDirectory() + "/.claude/cc-page/last-statusline.json"
-    let fileDate = (try? FileManager.default.attributesOfItem(atPath: jsonPath))?[.modificationDate] as? Date
+    let limit5hDir = NSHomeDirectory() + "/.claude/cc-page/limit-5h.d"
+    let limit7dDir = NSHomeDirectory() + "/.claude/cc-page/limit-7d.d"
 
-    // 檔案是全域共用（所有 Claude Code session 都寫同一份），超過新鮮度門檻
-    // 代表最後寫入的是別的閒置 session，不是當前這個，不該顯示（對齊 coralline 的做法）
-    guard let fd = fileDate, Date().timeIntervalSince(fd) < 10 else {
+    // CLI 端有 refreshInterval:1 持續重寫 JSON，10 秒沒更新代表目前這個 session
+    // 不是活的（對齊 coralline 的做法，避免顯示到別的閒置 session）。
+    // 桌面端 mitmproxy 是被動側錄，只有真的送出訊息才有新樣本，兩次對話間隔
+    // 隨便就超過 10 秒——用 mtime 卡新鮮度會讓 overlay 每次閒置就消失。高水位
+    // 目錄的資料語意本來就是「這個 reset 窗口內看過的最大值」，只要窗口
+    // (resets_at) 還沒過期，數字就仍然有效，不需要另外卡新鮮度。
+    let jsonDate = (try? FileManager.default.attributesOfItem(atPath: jsonPath))?[.modificationDate] as? Date
+    let cliLive = jsonDate.map { Date().timeIntervalSince($0) < 10 } ?? false
+    let now = Date().timeIntervalSince1970
+    let desktopLive = [limit5hDir, limit7dDir].contains { (rlLatest($0)?.resetsAt ?? 0) > now }
+
+    guard cliLive || desktopLive else {
         if panel.isVisible { panel.orderOut(nil) }
         return
     }
+
+    let fileDate = [jsonPath, limit5hDir, limit7dDir]
+        .compactMap { (try? FileManager.default.attributesOfItem(atPath: $0))?[.modificationDate] as? Date }
+        .max()
     if fileDate != lastFileDate, let s = readStatus() {
         lastFileDate = fileDate
         let newText = formatStatus(s)
